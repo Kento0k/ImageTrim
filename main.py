@@ -1,28 +1,39 @@
-from PIL import Image
+import cv2
 import matplotlib.pyplot as plt
 import math
-import numpy
 
 
-def pixel_list(pix, width, height):
-    pixels = []
-    for i in range(height):
-        for j in range(width):
-            pixels.append(pix[i][j])
-    return pixels
-
-
-def build_hist(pix, width):
+def build_hist(values, width, left, right):
     hist = [0] * width
-    for i in pix:
-        hist[i] += 1
+    for line in values:
+        for element in line:
+            if element < left:
+                continue
+            if element > right:
+                continue
+            hist[element] += 1
     return hist
 
 
-def trim_hist(pix, percent):
-    pix.sort()
-    remove = math.floor(len(pix) / 100 * percent)
-    return pix[remove:-remove]
+def trim_hist(original_hist, percent):
+    left = 0
+    right = 255
+    total_space = sum(original_hist)
+    new_space = total_space
+    print(new_space / total_space)
+    while True:
+        left += 1
+        new_space = sum(original_hist[left:right])
+        print(new_space / total_space)
+        print(str(left) + " - " + str(right))
+        if new_space / total_space < 1.0 - percent:
+            return [left, right]
+        right -= 1
+        new_space = sum(original_hist[left:right])
+        print(new_space / total_space)
+        print(str(left) + " - " + str(right))
+        if new_space / total_space < 1.0 - percent:
+            return [left, right]
 
 
 def transform_matrix(width, a, b):
@@ -38,96 +49,41 @@ def transform_matrix(width, a, b):
     return transform
 
 
-def transform_hist(width, matrix):
-    result = [0] * len(matrix)
-    transform = transform_matrix(width, min(matrix), max(matrix))
-    for i in range(len(matrix)):
-        result[i] = transform[matrix[i]]
-    return result
-
-
-def transform_image(pix, width, height, matrix):
-    image = [[0] * width for i in range(height)]
-    transform = transform_matrix(width, min(matrix), max(matrix))
-    for i in range(height):
-        for j in range(width):
-            image[i][j] = transform[pix[i][j]]
-    return image
-
-
 # Images loading and converting to gray tones
 
-carImage = Image.open("car.jpg")
-dogImage = Image.open("dog.jpg")
-lainImage = Image.open("lain.jpg")
+Image = cv2.imread("car.jpg")
 
-carImage = carImage.convert('L')
-dogImage = dogImage.convert('L')
-lainImage = lainImage.convert('L')
+Image = cv2.cvtColor(Image, cv2.COLOR_BGR2GRAY)
 
-carPix = numpy.asarray(carImage)
-dogPix = numpy.asarray(dogImage)
-lainPix = numpy.asarray(lainImage)
-
-carImage.show()
-dogImage.show()
-lainImage.show()
+cv2.imshow("Original_", Image)
 
 # Building base histograms
 
-histogramCar = build_hist(pixel_list(carPix, carImage.size[0], carImage.size[1]), 256)
-plt.plot(histogramCar)
+baseHist = build_hist(Image, 256, 0, 255)
+plt.plot(baseHist)
 plt.show()
 
-histogramDog = build_hist(pixel_list(dogPix, dogImage.size[0], dogImage.size[1]), 256)
-plt.plot(histogramDog)
-plt.show()
-
-histogramLain = build_hist(pixel_list(lainPix, lainImage.size[0], lainImage.size[1]), 256)
-plt.plot(histogramLain)
-plt.show()
 
 # Histogram trimming
 
-trimCarHist = trim_hist(pixel_list(carPix, carImage.size[0], carImage.size[1]), 5)
-histogramCarTrimmed = build_hist(trimCarHist, 256)
-plt.plot(histogramCarTrimmed)
-plt.show()
-
-trimDogHist = trim_hist(pixel_list(dogPix, dogImage.size[0], dogImage.size[1]), 5)
-histogramDogTrimmed = build_hist(trimDogHist, 256)
-plt.plot(histogramDogTrimmed)
-plt.show()
-
-trimLainHist = trim_hist(pixel_list(lainPix, lainImage.size[0], lainImage.size[1]), 5)
-histogramLainTrimmed = build_hist(trimLainHist, 256)
-plt.plot(histogramLainTrimmed)
+trimmedBorders = trim_hist(baseHist, 0.05)
+trimHist = build_hist(Image, 256, trimmedBorders[0], trimmedBorders[1])
+plt.plot(trimHist)
 plt.show()
 
 # Histogram transformation
 
-finalCarHist = transform_hist(256, trimCarHist)
-histogramCarFinal = build_hist(finalCarHist, 256)
-plt.plot(histogramCarFinal)
-plt.show()
+transformMatrix = transform_matrix(256, trimmedBorders[0], trimmedBorders[1])
 
-finalDogHist = transform_hist(256, trimDogHist)
-histogramDogFinal = build_hist(finalDogHist, 256)
-plt.plot(histogramDogFinal)
-plt.show()
+for i in range(len(Image)):
+        for j in range(len(Image[0])):
+            Image[i][j] = transformMatrix[Image[i][j]]
 
-finalLainHist = transform_hist(256, trimLainHist)
-histogramLainFinal = build_hist(finalLainHist, 256)
-plt.plot(histogramLainFinal)
+finalHist = build_hist(Image, 256, 0, 255)
+plt.plot(finalHist)
 plt.show()
 
 # Print new images
+cv2.imshow("Result", Image)
 
-carImage = Image.fromarray(numpy.uint32(transform_image(carPix, carImage.size[0], carImage.size[1], trimCarHist)))
-carImage.show()
-
-dogImage = Image.fromarray(numpy.uint32(transform_image(dogPix, dogImage.size[0], dogImage.size[1], trimDogHist)))
-dogImage.show()
-
-lainImage = Image.fromarray(numpy.uint32(transform_image(lainPix, lainImage.size[0], lainImage.size[1], trimLainHist)))
-lainImage.show()
+cv2.waitKey(0)
